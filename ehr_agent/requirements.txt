@@ -1,0 +1,4 @@
+transformers>=4.45
+torch>=2.2
+accelerate>=1.2
+python-dotenv>=1.0

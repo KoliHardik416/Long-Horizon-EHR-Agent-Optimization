@@ -6,11 +6,7 @@ __pycache__/
 trajectories.jsonl
 
 # Local EHR source data and prepared subsets.
-/data
-
-# Local database/vector-store state and generated artifacts.
-/postgres_data/
-/qdrant_storage/
+/data/
+/runtime/
 /artifacts/
-
 /docs

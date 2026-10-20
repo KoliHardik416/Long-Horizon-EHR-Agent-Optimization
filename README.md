@@ -9,7 +9,7 @@ database state, vector-store state, and generated artifacts.
 
 ```bash
 python3.12 -m venv .venv312
-.venv312/bin/pip install -r ehr_agent/requirements.txt
+.venv312/bin/pip install -r app/agent/requirements.txt
 .venv312/bin/pip install -r baseline_postgres/requirements.txt
 ```
 
@@ -56,7 +56,7 @@ After loading `mimiciv_note`, run section-aware chunking:
 
 ```bash
 PGHOST=localhost PGPORT=5432 PGDATABASE=mimiciv PGUSER=postgres PGPASSWORD=postgres \
-.venv312/bin/python -m note_pipeline.cli \
+.venv312/bin/python -m app.notes.cli \
   artifacts/mimic_note_chunks.jsonl \
   --note-type discharge --chunk-size 500 --chunk-overlap 75
 ```
@@ -66,7 +66,7 @@ This creates inspectable JSONL and does not generate embeddings. Use
 
 ## MIMIC-III chunking and embeddings
 
-The existing `rag/docker-compose.yml` starts Qdrant and an indexer that reads
+The existing `app/rag/docker-compose.yml` starts Qdrant and an indexer that reads
 MIMIC-III `NOTEEVENTS` from PostgreSQL, chunks notes, embeds them with FastEmbed,
 and stores vectors in Qdrant. It expects a host PostgreSQL database named
 `mimic` with `postgres/postgres` credentials.
@@ -80,7 +80,7 @@ Qdrant is available at `http://localhost:6333`; the default collection is
 `mimic3_notes`. Generated chunks are written to
 `artifacts/mimic3_note_chunks.jsonl`, and the collection is recreated on each
 indexing run. For a smoke test, set `NOTE_LIMIT: "15"` in
-`rag/docker-compose.yml` and rerun the command. Set `EMBEDDING_MODEL` to change
+`app/rag/docker-compose.yml` and rerun the command. Set `EMBEDDING_MODEL` to change
 the FastEmbed model.
 
 ## Local Gemma agent
@@ -90,7 +90,7 @@ Configure `.env` with `HF_TOKEN` and `HF_MODEL_ID`, authenticate, and run:
 ```bash
 .venv312/bin/hf auth login
 PGHOST=localhost PGPORT=5432 PGDATABASE=mimiciv PGUSER=postgres PGPASSWORD=postgres \
-.venv312/bin/python -m ehr_agent.cli \
+.venv312/bin/python -m app.agent.cli \
   --subject-id 10000032 --hadm-id 22595853 \
   "Summarize the admission and identify important laboratory trends." \
   --trace artifacts/trajectories.jsonl

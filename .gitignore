@@ -17,3 +17,5 @@ trajectories.jsonl
 /postgres_data/
 /qdrant_storage/
 /artifacts/
+
+/docs

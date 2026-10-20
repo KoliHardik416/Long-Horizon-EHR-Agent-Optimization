@@ -6,12 +6,7 @@ __pycache__/
 trajectories.jsonl
 
 # Local EHR source data and prepared subsets.
-/flat_input/
-/mimiciii/
-/mimiciii_subset_15/
-/mimiciv/
-/mimic-iv/
-/mimic-iv-note/
+/data
 
 # Local database/vector-store state and generated artifacts.
 /postgres_data/

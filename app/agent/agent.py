@@ -66,12 +66,14 @@ class LocalEHRAgent:
             raise ValueError(f"invalid task role: {role}")
         if depth > self.max_depth:
             raise RuntimeError("maximum recursion depth exceeded")
+        arguments = dict(parent.arguments if parent else {})
+        arguments.update(dict(raw.get("arguments") or {}))
         return TaskNode(
             task_id=str(raw.get("task_id") or raw.get("id") or uuid.uuid4().hex[:8]),
             objective=str(raw.get("objective") or raw.get("question") or ""), role=role,
             parent_task_id=parent.task_id if parent else None,
             allowed_tools=list(raw.get("allowed_tools") or raw.get("tools") or []),
-            arguments=dict(raw.get("arguments") or {}), depth=depth,
+            arguments=arguments, depth=depth,
             can_delegate=role == "controller" and depth < self.max_depth,
         )
 
@@ -93,7 +95,8 @@ class LocalEHRAgent:
         return {"task_id": node.task_id, "role": "worker", "report": report}
 
     def _controller(self, node: TaskNode, request: str) -> dict[str, Any]:
-        prompt = {"root_request": request, "task": asdict(node), "tools": TOOL_SCHEMAS}
+        prompt = {"root_request": request, "task": asdict(node), "tools": TOOL_SCHEMAS,
+                  "task_contract": self._task_contract}
         decision = self._model_json("controller", [{"role": "system", "content": CONTROLLER_SYSTEM},
                                                      {"role": "user", "content": json.dumps(prompt, default=str)}])
         mode = decision.get("decision", decision.get("mode", "execute"))
@@ -124,8 +127,11 @@ class LocalEHRAgent:
         self.trace["events"].append({"event": "task_finished", "task_id": node.task_id})
         return result
 
-    def run(self, request: str, subject_id: int, hadm_id: int | None = None) -> dict[str, Any]:
-        root = TaskNode("root", request, allowed_tools=[tool["name"] for tool in TOOL_SCHEMAS],
+    def run(self, request: str, subject_id: int, hadm_id: int | None = None,
+            task_contract: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._task_contract = task_contract or {}
+        allowed_tools = (task_contract or {}).get("required_tools") or [tool["name"] for tool in TOOL_SCHEMAS]
+        root = TaskNode("root", request, allowed_tools=allowed_tools,
                         arguments={"subject_id": subject_id, "hadm_id": hadm_id})
         tree = self._run_node(root, request)
         reports = tree.get("children", [tree])

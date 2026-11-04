@@ -7,6 +7,9 @@ from typing import Any
 
 from .connection import connect
 
+class RetrievalError(RuntimeError):
+    """A database retrieval failure with enough context for an agent to recover."""
+
 
 class MIMICIIIRetriever:
     """Allow-listed, read-only MIMIC-III retrieval operations."""
@@ -17,6 +20,10 @@ class MIMICIIIRetriever:
     @staticmethod
     def _rows(cursor) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def _with_source(rows: list[dict[str, Any]], source: str) -> list[dict[str, Any]]:
+        return [{"source": source, **row} for row in rows]
 
     def patient_context(self, subject_id: int) -> dict[str, Any]:
         with connect(self.conninfo) as conn, conn.cursor() as cur:
@@ -43,8 +50,25 @@ class MIMICIIIRetriever:
                 WHERE subject_id = %s ORDER BY intime
             """, (subject_id,))
             icu_stays = self._rows(cur)
-        return {"patient": dict(patient) if patient else None,
-                "admissions": admissions, "icu_stays": icu_stays}
+        return {"source": "mimiciii.patients", "patient": dict(patient) if patient else None,
+                "admissions": self._with_source(admissions, "mimiciii.admissions"),
+                "icu_stays": self._with_source(icu_stays, "mimiciii.icustays")}
+
+    def admissions(self, subject_id: int, hadm_id: int | None = None,
+                   limit: int = 100) -> list[dict[str, Any]]:
+        clauses = ["subject_id = %s"]; params: list[Any] = [subject_id]
+        if hadm_id is not None: clauses.append("hadm_id = %s"); params.append(hadm_id)
+        params.append(limit)
+        with connect(self.conninfo) as conn, conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT hadm_id, subject_id, admittime, dischtime, deathtime,
+                       admission_type, admission_location, discharge_location,
+                       insurance, language, religion, marital_status,
+                       ethnicity AS race, hospital_expire_flag
+                FROM mimiciii.admissions WHERE {' AND '.join(clauses)}
+                ORDER BY admittime LIMIT %s
+            """, params)
+            return self._with_source(self._rows(cur), "mimiciii.admissions")
 
     def labs(self, subject_id: int, hadm_id: int | None = None,
              start: datetime | None = None, end: datetime | None = None,
@@ -66,7 +90,7 @@ class MIMICIIIRetriever:
                 WHERE {' AND '.join(clauses)}
                 ORDER BY l.charttime NULLS LAST, l.row_id LIMIT %s
             """, params)
-            return self._rows(cur)
+            return self._with_source(self._rows(cur), "mimiciii.labevents")
 
     def diagnoses(self, subject_id: int, hadm_id: int | None = None,
                   limit: int = 200) -> list[dict[str, Any]]:
@@ -82,7 +106,7 @@ class MIMICIIIRetriever:
                 WHERE {' AND '.join(clauses)}
                 ORDER BY d.hadm_id, d.seq_num LIMIT %s
             """, params)
-            return self._rows(cur)
+            return self._with_source(self._rows(cur), "mimiciii.diagnoses_icd")
 
     def medications(self, subject_id: int, hadm_id: int | None = None,
                     limit: int = 500) -> list[dict[str, Any]]:
@@ -98,7 +122,7 @@ class MIMICIIIRetriever:
                 WHERE {' AND '.join(clauses)}
                 ORDER BY startdate NULLS LAST LIMIT %s
             """, params)
-            return self._rows(cur)
+            return self._with_source(self._rows(cur), "mimiciii.prescriptions")
 
     def procedures(self, subject_id: int, hadm_id: int | None = None,
                    limit: int = 200) -> list[dict[str, Any]]:
@@ -114,5 +138,23 @@ class MIMICIIIRetriever:
                 WHERE {' AND '.join(clauses)}
                 ORDER BY p.hadm_id, p.seq_num LIMIT %s
             """, params)
-            return self._rows(cur)
+            return self._with_source(self._rows(cur), "mimiciii.procedures_icd")
+
+    def notes(self, subject_id: int, hadm_id: int | None = None,
+              start: datetime | None = None, end: datetime | None = None,
+              limit: int = 100) -> list[dict[str, Any]]:
+        clauses = ["subject_id = %s"]; params: list[Any] = [subject_id]
+        if hadm_id is not None: clauses.append("hadm_id = %s"); params.append(hadm_id)
+        if start is not None: clauses.append("COALESCE(charttime, chartdate::timestamp) >= %s"); params.append(start)
+        if end is not None: clauses.append("COALESCE(charttime, chartdate::timestamp) < %s"); params.append(end)
+        params.append(limit)
+        with connect(self.conninfo) as conn, conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT row_id, subject_id, hadm_id, chartdate, charttime,
+                       category, iserror, text
+                FROM mimiciii.noteevents WHERE {' AND '.join(clauses)}
+                ORDER BY COALESCE(charttime, chartdate::timestamp) NULLS LAST, row_id
+                LIMIT %s
+            """, params)
+            return self._with_source(self._rows(cur), "mimiciii.noteevents")
 

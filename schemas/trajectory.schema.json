@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://long-horizon-ehr-agent-optimization.local/schemas/trajectory.schema.json",
+  "title": "EHR Agent Trajectory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "model",
+    "steps",
+    "final_answer",
+    "validation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "final_answer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "validation": {
+      "$ref": "#/$defs/validation"
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "enum": ["tool_call", "tool_result", "delegation", "final_answer"]
+        },
+        "tool": {
+          "type": "string",
+          "enum": [
+            "patient_context",
+            "admissions",
+            "labs",
+            "medications",
+            "diagnoses",
+            "procedures",
+            "notes"
+          ]
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowed_tools": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "patient_context",
+              "admissions",
+              "labs",
+              "medications",
+              "diagnoses",
+              "procedures",
+              "notes"
+            ]
+          }
+        },
+        "observation": {
+          "$ref": "#/$defs/observation"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"action": {"const": "tool_call"}}
+          },
+          "then": {
+            "required": ["tool", "arguments"]
+          }
+        },
+        {
+          "if": {
+            "properties": {"action": {"const": "tool_result"}}
+          },
+          "then": {
+            "required": ["observation"]
+          }
+        },
+        {
+          "if": {
+            "properties": {"action": {"const": "delegation"}}
+          },
+          "then": {
+            "required": ["task_id", "objective"]
+          }
+        }
+      ]
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "evidence_references"],
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "evidence_references": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence_reference"
+          }
+        }
+      }
+    },
+    "evidence_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "identifiers"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^mimiciii\\.[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "identifiers": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": true
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["answer_correct", "evidence_grounded", "tool_calls_valid"],
+      "properties": {
+        "answer_correct": {
+          "type": "boolean"
+        },
+        "evidence_grounded": {
+          "type": "boolean"
+        },
+        "tool_calls_valid": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "judge": {
+          "$ref": "#/$defs/judge"
+        }
+      }
+    },
+    "judge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "answer_correct",
+        "evidence_grounded",
+        "tool_use_valid",
+        "score",
+        "rationale"
+      ],
+      "properties": {
+        "available": {"type": "boolean"},
+        "answer_correct": {"type": "boolean"},
+        "evidence_grounded": {"type": "boolean"},
+        "tool_use_valid": {"type": "boolean"},
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "rationale": {"type": "string"}
+      }
+    }
+  }
+}

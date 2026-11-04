@@ -1,0 +1,91 @@
+services:
+  mimiciv-postgres:
+    image: postgres:16
+    container_name: mimiciv-postgres-500
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_DB: mimiciv500
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ../../runtime/postgres_mimiciv500:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mimiciv500"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mimiciv-build:
+    build:
+      context: ../../database/mimic-iv
+      dockerfile: buildmimic/postgres/docker/Dockerfile
+    environment:
+      PGHOST: mimiciv-postgres
+      PGDATABASE: mimiciv500
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      MIMIC_MAKE_CONCEPTS: "false"
+      MIMIC_VALIDATE: "true"
+    depends_on:
+      mimiciv-postgres:
+        condition: service_healthy
+    volumes:
+      - ../../data/mimiciv_note_subset_500/mimiciv:/data:ro
+
+  mimiciv-note-build:
+    image: postgres:16
+    container_name: mimiciv-note-build-500
+    environment:
+      PGHOST: mimiciv-postgres
+      PGDATABASE: mimiciv500
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    depends_on:
+      mimiciv-postgres:
+        condition: service_healthy
+    volumes:
+      - ../..:/repo:ro
+      - ../../data/mimiciv_note_subset_500/note/note:/data:ro
+    command:
+      - sh
+      - -c
+      - >-
+        psql -v ON_ERROR_STOP=1 -f /repo/database/mimic-iv-note/buildmimic/postgres/create.sql
+        && psql -v ON_ERROR_STOP=1 -v mimic_data_dir=/data
+        -f /repo/database/mimic-iv-note/buildmimic/postgres/load_gz.sql
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mimiciv-qdrant-500
+    ports:
+      - "127.0.0.1:6335:6333"
+      - "127.0.0.1:6336:6334"
+    volumes:
+      - ../../runtime/qdrant_storage_mimiciv500:/qdrant/storage
+
+  rag-indexer:
+    build:
+      context: ../..
+      dockerfile: app/rag/Dockerfile
+    container_name: mimiciv-rag-indexer-500
+    command: ["python", "-m", "app.rag.index_mimic4"]
+    environment:
+      PGHOST: host.docker.internal
+      PGPORT: "5433"
+      PGDATABASE: mimiciv500
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: mimiciv_note_500
+      CHUNK_OUTPUT: /app/artifacts/mimiciv_note_chunks_500.jsonl
+      NOTE_LIMIT: "0"
+    depends_on:
+      mimiciv-build:
+        condition: service_completed_successfully
+      mimiciv-note-build:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_started
+    volumes:
+      - ../../artifacts:/app/artifacts

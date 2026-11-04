@@ -47,6 +47,48 @@ class StructuredRetriever:
         return {"patient": dict(patient) if patient else None,
                 "admissions": admissions, "icu_stays": icu_stays}
 
+    def admissions(self, subject_id: int, hadm_id: int | None = None,
+                   limit: int = 100) -> list[dict[str, Any]]:
+        clauses = ["subject_id = %s"]
+        params: list[Any] = [subject_id]
+        if hadm_id is not None:
+            clauses.append("hadm_id = %s")
+            params.append(hadm_id)
+        params.append(limit)
+        with connect(self.conninfo) as conn, conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT hadm_id, subject_id, admittime, dischtime, deathtime,
+                       admission_type, admission_location, discharge_location,
+                       hospital_expire_flag
+                FROM mimiciv_hosp.admissions
+                WHERE {' AND '.join(clauses)}
+                ORDER BY admittime
+                LIMIT %s
+            """, params)
+            return self._rows(cur)
+
+    def notes(self, subject_id: int, hadm_id: int | None = None,
+              limit: int = 100) -> list[dict[str, Any]]:
+        """Retrieve bounded discharge and radiology notes from MIMIC-IV-Note."""
+        clauses = ["subject_id = %s"]
+        params: list[Any] = [subject_id]
+        if hadm_id is not None:
+            clauses.append("hadm_id = %s")
+            params.append(hadm_id)
+        rows: list[dict[str, Any]] = []
+        with connect(self.conninfo) as conn, conn.cursor() as cur:
+            for table in ("mimiciv_note.discharge", "mimiciv_note.radiology"):
+                cur.execute(f"""
+                    SELECT note_id, subject_id, hadm_id, note_type,
+                           charttime, storetime, text
+                    FROM {table}
+                    WHERE {' AND '.join(clauses)}
+                    ORDER BY charttime NULLS LAST, note_id
+                    LIMIT %s
+                """, [*params, limit])
+                rows.extend({"source": table, **row} for row in self._rows(cur))
+        return sorted(rows, key=lambda row: (row.get("charttime") is None, row.get("charttime")))[:limit]
+
     def labs(self, subject_id: int, hadm_id: int | None = None,
              start: datetime | None = None, end: datetime | None = None,
              itemids: list[int] | None = None, limit: int = 500) -> list[dict[str, Any]]:

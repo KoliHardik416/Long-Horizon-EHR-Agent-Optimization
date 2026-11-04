@@ -20,3 +20,18 @@ Set `NOTE_LIMIT` to a positive number to index only the first N notes during a
 smoke test. The indexer recreates the collection on each run so experiments
 are reproducible.
 
+## MIMIC-IV 500-patient stack
+
+The MIMIC-IV subset uses a separate PostgreSQL service and database so the
+working MIMIC-III stack is not overwritten:
+
+```bash
+cd app/rag
+docker compose -f docker-compose.mimiciv500.yml up --build
+```
+
+It uses PostgreSQL database `mimiciv500` on host port `5433`, persistent data in
+`runtime/postgres_mimiciv500`, Qdrant on host port `6335`, and the
+`mimiciv_note_500` collection. The Compose build jobs load the structured
+MIMIC-IV and MIMIC-IV-Note subset before the indexer starts.
+

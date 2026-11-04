@@ -10,3 +10,4 @@ trajectories.jsonl
 /runtime/
 /artifacts/
 /docs
+!/docs/RETRIEVAL_API.md

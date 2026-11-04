@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://long-horizon-ehr-agent-optimization.local/schemas/task.schema.json",
+  "title": "Synthetic EHR Task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "dataset", "question", "scope", "evidence_plan", "success_criteria"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "dataset": {"enum": ["mimic-iii", "mimic-iv"]},
+    "split": {"type": ["string", "null"], "enum": ["train", "validation", "test", null]},
+    "question": {"type": "string", "minLength": 1},
+    "scope": {"$ref": "#/$defs/scope"},
+    "evidence_plan": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence_step"}},
+    "success_criteria": {"$ref": "#/$defs/success_criteria"},
+    "difficulty": {"enum": ["easy", "medium", "hard"]},
+    "complexity": {"$ref": "#/$defs/complexity"},
+    "required_tools": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "reference_evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence_reference"}},
+    "reference_answer": {"type": ["string", "null"], "minLength": 1}
+    ,"execution": {"$ref": "#/$defs/execution"}
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject_id", "admission_scope"],
+      "properties": {
+        "subject_id": {"type": "integer", "minimum": 1},
+        "admission_scope": {"enum": ["target_admission", "all_admissions", "selected_admissions"]},
+        "target_hadm_id": {"type": ["integer", "null"], "minimum": 1},
+        "hadm_ids": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true},
+        "stay_ids": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true},
+        "temporal_windows": {"type": "array", "items": {"$ref": "#/$defs/temporal_window"}}
+      }
+    },
+    "temporal_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "start": {"type": ["string", "null"]},
+        "end": {"type": ["string", "null"]},
+        "end_exclusive": {"type": "boolean"}
+      }
+    },
+    "evidence_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "objective", "allowed_tools", "depends_on", "expected_sources"],
+      "properties": {
+        "step_id": {"type": "string", "minLength": 1},
+        "objective": {"type": "string", "minLength": 1},
+        "allowed_tools": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "depends_on": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "expected_sources": {"type": "array", "items": {"type": "string", "pattern": "^mimic(iii|iv[_a-z]*)\\.[A-Za-z_][A-Za-z0-9_]*$"}},
+        "required": {"type": "boolean"},
+        "arguments": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "success_criteria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_evidence_steps", "required_comparisons", "unsupported_claim_constraints"],
+      "properties": {
+        "required_evidence_steps": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "required_comparisons": {"type": "array", "items": {"type": "string"}},
+        "unsupported_claim_constraints": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "complexity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retrieval", "reasoning", "temporal", "integration", "total"],
+      "properties": {
+        "retrieval": {"type": "integer", "minimum": 0, "maximum": 3},
+        "reasoning": {"type": "integer", "minimum": 0, "maximum": 3},
+        "temporal": {"type": "integer", "minimum": 0, "maximum": 3},
+        "integration": {"type": "integer", "minimum": 0, "maximum": 3},
+        "total": {"type": "integer", "minimum": 0, "maximum": 12}
+      }
+    },
+    "evidence_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "identifiers", "description"],
+      "properties": {
+        "source": {"type": "string", "pattern": "^mimic(iii|iv[_a-z]*)\\.[A-Za-z_][A-Za-z0-9_]*$"},
+        "identifiers": {"type": "object", "minProperties": 1, "additionalProperties": true},
+        "description": {"type": "string", "minLength": 1}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_extra_calls": {"type": "integer", "minimum": 0, "maximum": 10},
+        "allow_reordering": {"type": "boolean"},
+        "allow_retries": {"type": "boolean"}
+      }
+    }
+  }
+}
